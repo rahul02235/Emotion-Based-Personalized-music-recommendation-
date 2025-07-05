@@ -53,16 +53,21 @@ To integrate your models:
 - File Storage: Local filesystem
 
   ## 📸 Screenshots
+  
    Live Emotion Detection via OpenCV and Pretrained CNN
+  
   ![image](https://github.com/user-attachments/assets/542cde46-f655-44b9-87b2-3ad1c6fd9fc6)
 
   User Sign up and Login
+  
   ![image](https://github.com/user-attachments/assets/aee01c95-968b-4ed9-94c0-98cc1e26a63b)
 
   Front-End of the Music Recommendation System
+  
   ![image](https://github.com/user-attachments/assets/9ec18efa-1268-48ec-987b-f4ad6f218d02)
 
  Final Result
+ 
   ![image](https://github.com/user-attachments/assets/895c3ee7-be4e-44ce-ad3c-289c8353fcd7)
 
 
