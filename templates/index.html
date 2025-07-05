@@ -1,0 +1,462 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Recommender</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Left Sidebar -->
+        <div class="sidebar">
+            <!-- User Profile -->
+            <div class="profile">
+                {% if user.userprofile.profile_picture %}
+                    <img src="{{ user.userprofile.profile_picture.url }}" alt="Profile Picture" class="profile-pic">
+                {% else %}
+                    <img src="{% static 'images/default-avatar.png' %}" alt="Default Profile Picture" class="profile-pic">
+                {% endif %}
+                <h3 class="username">{{ user.username }}</h3>
+            </div>
+
+            <!-- Navigation Menu -->
+            <nav class="nav-menu">
+                <a href="{% url 'home' %}" class="nav-item {% if request.resolver_match.url_name == 'home' %}active{% endif %}">
+                    <i class="fas fa-home"></i> Home
+                </a>
+                <a href="{% url 'api:recommendations' %}" class="nav-item {% if request.resolver_match.url_name == 'recommendations' %}active{% endif %}">
+                    <i class="fas fa-music"></i> Recommendations
+                </a>
+                <a href="{% url 'api:favorites' %}" class="nav-item {% if request.resolver_match.url_name == 'favorites' %}active{% endif %}">
+                    <i class="fas fa-heart"></i> Favorites
+                </a>
+                <a href="{% url 'logout' %}" class="nav-item">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            </nav>
+
+            <!-- Available Songs -->
+            <div class="available-songs">
+                <h3>Available Songs</h3>
+                <div class="song-list">
+                    {% for song in songs %}
+                    <div class="song-item">
+                        <h4>{{ song.title|default:"Unknown Title" }}</h4>
+                        <p class="artist">{{ song.artist|default:"Unknown Artist" }}</p>
+                        <div class="song-actions">
+                            <button class="like-btn"><i class="fas fa-thumbs-up"></i></button>
+                            <button class="dislike-btn"><i class="fas fa-thumbs-down"></i></button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            {% block content %}
+            <div class="welcome-section fade-in">
+                <h1>Welcome to Music Recommender</h1>
+                <p>Discover music based on your mood. Upload an image or use your camera to get started!</p>
+                
+                <div class="upload-section">
+                    <!-- Image Preview -->
+                    <div class="image-preview" id="imagePreview">
+                        <img id="preview" src="#" alt="Preview" style="display: none; width: 100%; height: 100%; object-fit: contain;">
+                        <video id="camera" style="display: none;" autoplay playsinline></video>
+                        <div class="upload-placeholder" id="uploadPlaceholder">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <p>Click or drag image here</p>
+                        </div>
+                        <div id="faceDetectionOverlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 2px solid #4CAF50; pointer-events: none;"></div>
+                    </div>
+
+                    <!-- Image Guidelines -->
+                    <div class="image-guidelines">
+                        <h3>Image Guidelines</h3>
+                        <ul>
+                            <li><i class="fas fa-check-circle"></i> Ensure the image contains a clear, well-lit face</li>
+                            <li><i class="fas fa-check-circle"></i> Face should be looking towards the camera</li>
+                            <li><i class="fas fa-check-circle"></i> Avoid blurry or dark images</li>
+                            <li><i class="fas fa-check-circle"></i> Make sure the face is not too small in the frame</li>
+                        </ul>
+                    </div>
+
+                    <!-- Control Buttons -->
+                    <div class="control-buttons">
+                        <div class="camera-buttons">
+                            <button type="button" class="btn" id="cameraBtn">
+                                <i class="fas fa-camera"></i> Open Camera
+                            </button>
+                            <button type="button" class="btn" id="captureBtn" style="display: none;">
+                                <i class="fas fa-camera"></i> Take Photo
+                            </button>
+                        </div>
+                        <div class="upload-buttons">
+                            <input type="file" id="imageInput" accept="image/*" style="display: none;">
+                            <button type="button" class="btn" onclick="document.getElementById('imageInput').click()">
+                                <i class="fas fa-file-upload"></i> Choose File
+                            </button>
+                            <button type="button" class="btn primary-btn" id="uploadBtn" disabled>
+                                <i class="fas fa-upload"></i> Get Recommendations
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Emotion Display -->
+                    <div class="emotion-display" id="emotionDisplay" style="display: none;">
+                        <div class="emotion-icon">😊</div>
+                        <p>Detected Emotion: <span id="detectedEmotion"></span></p>
+                    </div>
+
+                    <!-- Real-time Recommendations Section -->
+                    <div class="real-time-recommendations" id="realTimeRecommendations" style="display: none;">
+                        <h2>Real-time Music Recommendations</h2>
+                        <div class="recommendations-list" id="realTimeRecommendationsList"></div>
+                    </div>
+
+                    <!-- Original Recommendations Section -->
+                    <div class="recommendations-section" id="recommendationsSection" style="display: none;">
+                        <h2>Your Music Recommendations</h2>
+                        <div class="recommendations-list" id="recommendationsList"></div>
+                    </div>
+                </div>
+            </div>
+            {% endblock %}
+        </div>
+    </div>
+
+    <!-- Theme Toggle Button -->
+    <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+        <i class="fas fa-moon"></i>
+    </button>
+
+    {% block extra_js %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get DOM elements
+            const imageInput = document.getElementById('imageInput');
+            const preview = document.getElementById('preview');
+            const uploadBtn = document.getElementById('uploadBtn');
+            const uploadPlaceholder = document.getElementById('uploadPlaceholder');
+            const emotionDisplay = document.getElementById('emotionDisplay');
+            const detectedEmotion = document.getElementById('detectedEmotion');
+            const faceDetectionOverlay = document.getElementById('faceDetectionOverlay');
+
+            // File Upload Handling
+            imageInput.onchange = function(e) {
+                if (this.files && this.files[0]) {
+                    const file = this.files[0];
+                    
+                    // Check if file is an image
+                    if (!file.type.startsWith('image/')) {
+                        showError('Please select an image file');
+                        return;
+                    }
+
+                    // Show the image preview
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        preview.src = e.target.result;
+                        preview.style.display = 'block';
+                        uploadPlaceholder.style.display = 'none';
+                        uploadBtn.disabled = false;
+
+                        // Ensure image is properly scaled
+                        preview.onload = function() {
+                            const maxWidth = preview.parentElement.clientWidth;
+                            const maxHeight = preview.parentElement.clientHeight;
+                            const ratio = Math.min(maxWidth / preview.naturalWidth, maxHeight / preview.naturalHeight);
+                            
+                            if (ratio < 1) {
+                                preview.style.width = (preview.naturalWidth * ratio) + 'px';
+                                preview.style.height = (preview.naturalHeight * ratio) + 'px';
+                            } else {
+                                preview.style.width = preview.naturalWidth + 'px';
+                                preview.style.height = preview.naturalHeight + 'px';
+                            }
+                        };
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            // Upload and Get Recommendations
+            uploadBtn.onclick = async function() {
+                if (!imageInput.files || !imageInput.files[0]) {
+                    showError('Please select an image first');
+                    return;
+                }
+
+                try {
+                    uploadBtn.disabled = true;
+                    uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+
+                    const formData = new FormData();
+                    formData.append('image', imageInput.files[0]);
+
+                    const response = await fetch('{% url "api:upload_image" %}', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': '{{ csrf_token }}'
+                        },
+                        body: formData
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        // Show emotion
+                        emotionDisplay.style.display = 'block';
+                        detectedEmotion.textContent = data.emotion || 'Processing...';
+                        
+                        // Get recommendations
+                        const recsResponse = await fetch(`/api/recommendations/${data.image_id}/`);
+                        const recsData = await recsResponse.json();
+                        
+                        if (recsData.success) {
+                            displayRecommendations(recsData.recommendations);
+                        } else {
+                            throw new Error(recsData.error || 'Failed to get recommendations');
+                        }
+                    } else {
+                        throw new Error(data.error || 'Failed to process image');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    showError(error.message);
+                } finally {
+                    uploadBtn.disabled = false;
+                    uploadBtn.innerHTML = '<i class="fas fa-upload"></i> Get Recommendations';
+                }
+            };
+
+            function displayRecommendations(recommendations) {
+                const recommendationsList = document.getElementById('recommendationsList');
+                const recommendationsSection = document.getElementById('recommendationsSection');
+                
+                recommendationsList.innerHTML = '';
+                recommendations.forEach(rec => {
+                    const recElement = document.createElement('div');
+                    recElement.className = 'recommendation-item';
+                    
+                    // Get Spotify track ID from the URL
+                    const spotifyId = rec.spotify_link ? rec.spotify_link.split('/').pop() : null;
+                    
+                    recElement.innerHTML = `
+                        <h3>${rec.title}</h3>
+                        <p class="artist">${rec.artist}</p>
+                        ${spotifyId ? `
+                            <div class="spotify-embed">
+                                <iframe src="https://open.spotify.com/embed/track/${spotifyId}"
+                                    width="100%" 
+                                    height="80" 
+                                    frameborder="0" 
+                                    allowtransparency="true" 
+                                    allow="encrypted-media">
+                                </iframe>
+                            </div>
+                        ` : ''}
+                        ${!spotifyId && rec.preview_url ? `
+                            <audio controls>
+                                <source src="${rec.preview_url}" type="audio/mpeg">
+                                Your browser does not support the audio element.
+                            </audio>
+                        ` : ''}
+                        ${rec.spotify_link ? `
+                            <a href="${rec.spotify_link}" target="_blank" class="spotify-link">
+                                <i class="fab fa-spotify"></i> Open in Spotify
+                            </a>
+                        ` : ''}
+                    `;
+                    recommendationsList.appendChild(recElement);
+                });
+                recommendationsSection.style.display = 'block';
+                
+                // Scroll to recommendations
+                recommendationsSection.scrollIntoView({ behavior: 'smooth' });
+            }
+
+            function showError(message) {
+                // Remove any existing error message
+                const existingError = document.querySelector('.error-message');
+                if (existingError) {
+                    existingError.remove();
+                }
+
+                // Create new error message
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-message';
+                errorDiv.innerHTML = `
+                    <i class="fas fa-exclamation-circle"></i>
+                    <p>${message}</p>
+                    <p class="error-help">Tips for better results:</p>
+                    <ul>
+                        <li>Make sure the image is well-lit</li>
+                        <li>Ensure the face is clearly visible</li>
+                        <li>Try to avoid blurry images</li>
+                        <li>Make sure the face is not too small in the frame</li>
+                    </ul>
+                `;
+
+                // Insert error message after the image preview
+                const imagePreview = document.getElementById('imagePreview');
+                imagePreview.parentNode.insertBefore(errorDiv, imagePreview.nextSibling);
+
+                // Scroll to error message
+                errorDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+    </script>
+    {% endblock %}
+
+    <style>
+        .image-preview {
+            width: 100%;
+            max-width: 500px;
+            height: 300px;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 20px auto;
+            overflow: hidden;
+            position: relative;
+            background-color: #f8f9fa;
+        }
+
+        .image-preview img {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+        }
+
+        .upload-placeholder {
+            text-align: center;
+            color: #666;
+            padding: 20px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .upload-placeholder i {
+            font-size: 48px;
+            margin-bottom: 10px;
+            color: #999;
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background-color: #f8f9fa;
+            color: #333;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            background-color: #e9ecef;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .primary-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .primary-btn:hover:not(:disabled) {
+            background-color: #45a049;
+        }
+
+        .image-guidelines {
+            max-width: 500px;
+            margin: 20px auto;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+
+        .image-guidelines h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-size: 16px;
+        }
+
+        .image-guidelines ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .image-guidelines li {
+            margin: 8px 0;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .image-guidelines i {
+            color: #4CAF50;
+        }
+
+        .error-message {
+            background-color: #fff3f3;
+            border: 1px solid #ffcdd2;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 15px auto;
+            max-width: 500px;
+            color: #d32f2f;
+            text-align: left;
+        }
+
+        .error-message i {
+            margin-right: 8px;
+            font-size: 1.2em;
+        }
+
+        .error-message .error-help {
+            margin: 10px 0 5px;
+            font-weight: bold;
+        }
+
+        .error-message ul {
+            margin: 5px 0;
+            padding-left: 25px;
+        }
+
+        #faceDetectionOverlay {
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</body>
+</html> 

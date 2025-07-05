@@ -1,0 +1,31 @@
+{% extends "index.html" %}
+
+{% block content %}
+<div class="favorites-page">
+    <h1>Your Favorite Songs</h1>
+    <div class="favorites-list">
+        {% for favorite in favorites %}
+        <div class="favorite-item">
+            <h3>{{ favorite.song_title }}</h3>
+            <p class="artist">{{ favorite.artist }}</p>
+            {% if favorite.preview_url %}
+            <audio controls>
+                <source src="{{ favorite.preview_url }}" type="audio/mpeg">
+                Your browser does not support the audio element.
+            </audio>
+            {% endif %}
+            {% if favorite.spotify_link %}
+            <a href="{{ favorite.spotify_link }}" target="_blank" class="spotify-link">
+                <i class="fab fa-spotify"></i> Listen on Spotify
+            </a>
+            {% endif %}
+            <button class="remove-favorite" data-id="{{ favorite.id }}">
+                <i class="fas fa-trash"></i> Remove from Favorites
+            </button>
+        </div>
+        {% empty %}
+        <p class="no-favorites">No favorite songs yet. Like some songs to see them here!</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %} 

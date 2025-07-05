@@ -1,0 +1,42 @@
+{% extends "index.html" %}
+
+{% block content %}
+<div class="recommendations-page">
+    <h1>Your Music Recommendations</h1>
+    <div class="recommendations-list">
+        {% for recommendation in recommendations %}
+        <div class="recommendation-item">
+            <h3>{{ recommendation.song_title }}</h3>
+            <p class="artist">{{ recommendation.artist }}</p>
+            
+            {% if recommendation.spotify_link %}
+                {% with spotify_id=recommendation.spotify_link|cut:"https://open.spotify.com/track/"|cut:"?" %}
+                <div class="spotify-embed">
+                    <iframe src="https://open.spotify.com/embed/track/{{ spotify_id }}"
+                        width="100%" 
+                        height="80" 
+                        frameborder="0" 
+                        allowtransparency="true" 
+                        allow="encrypted-media">
+                    </iframe>
+                </div>
+                {% endwith %}
+            {% elif recommendation.preview_url %}
+                <audio controls>
+                    <source src="{{ recommendation.preview_url }}" type="audio/mpeg">
+                    Your browser does not support the audio element.
+                </audio>
+            {% endif %}
+            
+            {% if recommendation.spotify_link %}
+            <a href="{{ recommendation.spotify_link }}" target="_blank" class="spotify-link">
+                <i class="fab fa-spotify"></i> Open in Spotify
+            </a>
+            {% endif %}
+        </div>
+        {% empty %}
+        <p class="no-recommendations">No recommendations yet. Try uploading an image!</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %} 
